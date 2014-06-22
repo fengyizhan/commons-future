@@ -1,5 +1,8 @@
 package org.isouth.commons.future.impl;
 
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -11,11 +14,13 @@ import org.isouth.commons.future.TaskPromise;
 
 public class DefaultTaskPromise implements TaskPromise {
 
-    private static final Object VOID_SUCCESS = new Success(null);
+    private static final ResultHolder VOID_SUCCESS = new Success(null);
 
     private volatile CountDownLatch complteLatch;
 
     private volatile ResultHolder result;
+
+    private List<TaskCallback> callbacks;
 
     private static interface ResultHolder {
         boolean isSuccess();
@@ -25,11 +30,11 @@ public class DefaultTaskPromise implements TaskPromise {
         Object getResult();
     }
 
-    private static final class Success<R> implements ResultHolder {
+    private static final class Success implements ResultHolder {
 
-        final R value;
+        final Object value;
 
-        Success(R value) {
+        Success(Object value) {
             this.value = value;
         }
 
@@ -44,7 +49,7 @@ public class DefaultTaskPromise implements TaskPromise {
         }
 
         @Override
-        public R getResult() {
+        public Object getResult() {
             return value;
         }
     }
@@ -111,8 +116,8 @@ public class DefaultTaskPromise implements TaskPromise {
             if (this.complteLatch == null) {
                 this.complteLatch = new CountDownLatch(1);
             }
-            this.complteLatch.await();
         }
+        this.complteLatch.await();
         return this;
     }
 
@@ -129,13 +134,24 @@ public class DefaultTaskPromise implements TaskPromise {
             if (this.complteLatch == null) {
                 this.complteLatch = new CountDownLatch(1);
             }
-            return this.complteLatch.await(timeout, unit);
         }
+        return this.complteLatch.await(timeout, unit);
     }
 
     @Override
     public TaskFuture onComplete(final TaskCallback callback) {
-        // TODO
+        if (isDone()) {
+            return callback.apply(this);
+        }
+        synchronized (this) {
+            if (isDone()) {
+                return callback.apply(this);
+            }
+            if (this.callbacks == null) {
+                this.callbacks = new LinkedList<>();
+            }
+            this.callbacks.add(callback);
+        }
         return this;
     }
 
@@ -207,26 +223,64 @@ public class DefaultTaskPromise implements TaskPromise {
 
     @Override
     public TaskPromise setSuccess(Object value) {
-        // TODO Auto-generated method stub
-        return null;
+        if (!trySuccess(value)) {
+            throw new IllegalStateException("Already complted future: " + this);
+        }
+        return this;
     }
 
     @Override
     public boolean trySuccess(Object value) {
-        // TODO Auto-generated method stub
+        ResultHolder holder = value == null ? VOID_SUCCESS : new Success(value);
+        if (setComplete(holder)) {
+            executeCallbacks();
+            return true;
+        }
         return false;
     }
 
     @Override
     public TaskPromise setFailure(Throwable cause) {
-        // TODO Auto-generated method stub
-        return null;
+        if (!tryFailure(cause)) {
+            throw new IllegalStateException("Already complted future: " + this);
+        }
+        return this;
     }
 
     @Override
     public boolean tryFailure(Throwable cause) {
-        // TODO Auto-generated method stub
+        if (setComplete(new Failure(cause))) {
+            executeCallbacks();
+            return true;
+        }
         return false;
     }
 
+    private boolean setComplete(ResultHolder holder) {
+        if (isDone()) {
+            return false;
+        }
+        synchronized (this) {
+            if (isDone()) {
+                return false;
+            }
+
+            this.result = holder;
+            if (this.complteLatch != null) {
+                this.complteLatch.countDown();
+            }
+        }
+        return true;
+    }
+
+    private void executeCallbacks() {
+        if (this.callbacks != null) {
+            Iterator<TaskCallback> callbackIter = this.callbacks.iterator();
+            TaskFuture f = this;
+            while (callbackIter.hasNext()) {
+                f = callbackIter.next().apply(f);
+                callbackIter.remove();
+            }
+        }
+    }
 }
