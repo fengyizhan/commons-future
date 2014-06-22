@@ -1,31 +1,23 @@
 package org.isouth.commons.future;
 
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
-public interface TaskFuture<V> extends Future<V> {
+public interface TaskFuture extends Future<Object> {
 
-    /**
-     * check if the task complete successfully.
-     * 
-     * @return {@code true} if the task complete successfully.
-     */
     boolean isSuccess();
 
     Throwable cause();
 
-    TaskFuture<V> await() throws InterruptedException;
+    Object getNow();
 
-    TaskFuture<V> awaitUninterruptibly();
+    TaskFuture await() throws InterruptedException;
 
-    boolean await(long timeoutMillis) throws InterruptedException;
+    boolean await(long timeout, TimeUnit unit) throws InterruptedException;
 
-    boolean awaitUninterruptibly(long timeoutMillis);
+    TaskFuture onComplete(TaskCallback callback);
 
-    V getNow();
+    TaskFuture onSuccess(TaskCallback callback);
 
-    void onComplete(TaskCallback<? extends TaskFuture<? super V>> callback);
-
-    void onSuccess(TaskCallback<? extends TaskFuture<? super V>> callback);
-
-    void onFailure(TaskCallback<? extends TaskFuture<? super V>> callback);
+    TaskFuture onFailure(TaskCallback callback);
 }

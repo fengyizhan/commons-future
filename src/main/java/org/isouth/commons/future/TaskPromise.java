@@ -1,10 +1,14 @@
 package org.isouth.commons.future;
 
-public interface TaskPromise<V> extends TaskFuture<V> {
+public interface TaskPromise extends TaskFuture {
 
-    TaskFuture<V> getFuture();
+    TaskFuture getFuture();
 
-    void setSuccess(V value);
+    TaskPromise setSuccess(Object result);
 
-    void setFailure(Throwable cause);
+    boolean trySuccess(Object result);
+
+    TaskPromise setFailure(Throwable cause);
+
+    boolean tryFailure(Throwable cause);
 }
