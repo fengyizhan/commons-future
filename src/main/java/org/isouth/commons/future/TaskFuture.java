@@ -72,4 +72,14 @@ public interface TaskFuture extends Future<Object> {
      * @return
      */
     TaskFuture onFailure(TaskCallback callback);
+    
+    boolean hasAttr(String key);
+    
+    Object getAttr(String key);
+    
+    TaskFuture addAttr(String key, Object value);
+    
+    Object removeAttr(String key);
+    
+    
 }

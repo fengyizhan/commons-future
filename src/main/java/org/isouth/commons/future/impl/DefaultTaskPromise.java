@@ -3,16 +3,23 @@ package org.isouth.commons.future.impl;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 import org.isouth.commons.future.TaskCallback;
 import org.isouth.commons.future.TaskFuture;
 import org.isouth.commons.future.TaskPromise;
 
 public class DefaultTaskPromise implements TaskPromise {
+
+    @SuppressWarnings("rawtypes")
+    private static final AtomicReferenceFieldUpdater<DefaultTaskPromise, ConcurrentMap> updater = AtomicReferenceFieldUpdater
+            .newUpdater(DefaultTaskPromise.class, ConcurrentMap.class, "attrs");
 
     private static final ResultHolder VOID_SUCCESS = new Success(null);
 
@@ -21,6 +28,8 @@ public class DefaultTaskPromise implements TaskPromise {
     private volatile ResultHolder result;
 
     private List<TaskCallback> callbacks;
+
+    private volatile ConcurrentMap<String, Object> attrs;
 
     private static interface ResultHolder {
         boolean isSuccess();
@@ -282,5 +291,50 @@ public class DefaultTaskPromise implements TaskPromise {
                 callbackIter.remove();
             }
         }
+    }
+
+    @Override
+    public boolean hasAttr(String key) {
+        ConcurrentMap<String, Object> attributes = this.attrs;
+        if (attributes == null || key == null) {
+            return false;
+        }
+        return attributes.containsKey(key);
+    }
+
+    @Override
+    public Object getAttr(String key) {
+        ConcurrentMap<String, Object> attributes = this.attrs;
+        if (attributes == null || key == null) {
+            return null;
+        }
+        return attributes.get(key);
+    }
+
+    @Override
+    public TaskFuture addAttr(String key, Object value) {
+        ConcurrentMap<String, Object> attributes = this.attrs;
+        if (attributes == null) {
+            attributes = new ConcurrentHashMap<>();
+            if (!updater.compareAndSet(this, null, attributes)) {
+                attributes = this.attrs;
+            }
+        }
+
+        if (value == null) {
+            attributes.remove(key);
+            return this;
+        }
+        attributes.put(key, value);
+        return this;
+    }
+
+    @Override
+    public Object removeAttr(String key) {
+        ConcurrentMap<String, Object> attributes = this.attrs;
+        if (attributes == null || key == null) {
+            return null;
+        }
+        return attributes.remove(key);
     }
 }
